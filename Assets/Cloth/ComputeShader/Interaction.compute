@@ -41,6 +41,8 @@ void Interaction(uint3 id : SV_DispatchThreadID)
     
         nowPoint[rawCount - 1].Velocity = float3(0, 0, 0);
         nowPoint[0].Velocity = float3(0, 0, 0);
+    nowPoint[meshVertexNums- 1].Velocity = float3(0, 0, 0);
+    nowPoint[meshVertexNums - rawCount].Velocity = float3(0, 0, 0);
     
         postPoint[index].Position = nowPoint[index].Position;
       

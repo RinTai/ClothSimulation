@@ -3,6 +3,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.XR;
 
+/*
+ 还需要把顶点的权重计算一下，用于直接影响一些顶点
+ 
+ */
 [RequireComponent(typeof(LineRenderer))]
 public class BoneSolver : MonoBehaviour
 {

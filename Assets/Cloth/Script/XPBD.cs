@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using TMPro.EditorUtilities;
+using Unity.Mathematics;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.AI;
@@ -43,18 +45,23 @@ public class Constraint
     protected static string m_NowPosBufferName = "nowPoint";
     protected static string m_PrePosBufferName = "prePoint";
     protected static string m_PostPosBufferName = "postPoint";
+    protected static string m_NeighborDateBufferName = "V2VDataBuffer";
+    protected static string m_NeighborIndexBufferName = "V2VIndexBuffer";
 
     protected int VertexNum = 0;
     public string ConstraintKernelName = "Constraint";
     public int ConstraintKernelIndex = 0;
     public CommandBuffer ConstraintCmd { get; set; }
 
-    public ComputeShader   ConstraintCompute { get; set; }
+    public ComputeShader  ConstraintCompute { get; set; }
 
     //基础3Buffer 
     public ComputeBuffer m_PrePointBuffer;
     public ComputeBuffer m_PostPointBuffer;
     public ComputeBuffer m_NowPointBuffer;
+
+    public ComputeBuffer m_NeighborDataBuffer;
+    public ComputeBuffer m_NeighborIndexBuffer;
 
     public Constraint()
     {
@@ -63,17 +70,20 @@ public class Constraint
     /// <summary>
     /// 初始化Buffer的 传入3Buffer就行了？有的是不同的
     /// </summary>
-    public virtual void InitialBuffer(ComputeBuffer nowPosBuffer,ComputeBuffer prePosBuffer,ComputeBuffer postPosBuffer)
+    public virtual void InitialBuffer(ComputeBuffer nowPosBuffer,ComputeBuffer prePosBuffer,ComputeBuffer postPosBuffer,ComputeBuffer nDataBuffer,ComputeBuffer nIndexBuffer)
     {
         m_PrePointBuffer = prePosBuffer;
         m_NowPointBuffer = nowPosBuffer;
         m_PostPointBuffer = postPosBuffer;
+
+        m_NeighborDataBuffer = nDataBuffer;
+        m_NeighborIndexBuffer = nIndexBuffer;   
     }
     /// <summary>
     /// 约束的执行，具体实现写在update里了. 不同的约束不同执行方式吧，这个是最基本的
     /// </summary>
     /// <param name="dt"></param>
-    public virtual void Execute(float dt, int DispatchNumX, int DispatchNumY, int DispatchNumZ, float Stiffness,float Gamma)
+    public virtual void Execute(float dt, int DispatchNumX, int DispatchNumY, int DispatchNumZ, float Stiffness, float Gamma)
     {
         //示例
         /*
@@ -133,12 +143,12 @@ public class Constraint_Distance : Constraint
         testIndex_3 = ConstraintCompute.FindKernel("Constraint_Bend");
         testIndex_4 = ConstraintCompute.FindKernel("Constraint_Shear");
     }
-    public override void Execute(float dt, int DispatchNumX, int DispatchNumY, int DispatchNumZ,float Stiffness,float Gamma)
+    public override void Execute(float dt, int DispatchNumX, int DispatchNumY, int DispatchNumZ, float Stiffness, float Gamma )
     {
         ConstraintCompute.SetFloat("gamma", Gamma);
-        ConstraintCompute.SetFloat("alpha", Stiffness / (Time.fixedDeltaTime * Time.fixedDeltaTime));
-        ConstraintCompute.SetFloat("deltaTime", Time.deltaTime / 20f);
-        ConstraintCompute.SetInt("simulationTimes", 8);
+        ConstraintCompute.SetFloat("alpha",  1 / Stiffness / (dt * dt));
+        ConstraintCompute.SetFloat("deltaTime", dt / 20);
+        ConstraintCompute.SetInt("simulationTimes", 20);
         ConstraintCompute.SetInt("meshVertexNums", VertexNum);
         ConstraintCompute.SetInt("rawCount", (int)Mathf.Sqrt(VertexNum));
 
@@ -149,28 +159,40 @@ public class Constraint_Distance : Constraint
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, ConstraintKernelIndex, m_PrePosBufferName, m_PrePointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, ConstraintKernelIndex, m_NowPosBufferName, m_NowPointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, ConstraintKernelIndex, m_PostPosBufferName, m_PostPointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, ConstraintKernelIndex, m_NeighborDateBufferName, m_NeighborDataBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, ConstraintKernelIndex, m_NeighborIndexBufferName, m_NeighborIndexBuffer);
         ConstraintCmd.DispatchCompute(ConstraintCompute, ConstraintKernelIndex, DispatchNumX, DispatchNumY, DispatchNumZ);
 
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex, m_PrePosBufferName, m_PrePointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex, m_NowPosBufferName, m_NowPointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex, m_PostPosBufferName, m_PostPointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex, m_NeighborDateBufferName, m_NeighborDataBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex, m_NeighborIndexBufferName, m_NeighborIndexBuffer);
         ConstraintCmd.DispatchCompute(ConstraintCompute, testIndex, DispatchNumX, DispatchNumY, DispatchNumZ);
 
         //感觉这个更像不可塑的约束 mesh不能压缩只能抖动
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_2, m_PrePosBufferName, m_PrePointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_2, m_NowPosBufferName, m_NowPointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_2, m_PostPosBufferName, m_PostPointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_2, m_NeighborDateBufferName, m_NeighborDataBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_2, m_NeighborIndexBufferName, m_NeighborIndexBuffer);
         ConstraintCmd.DispatchCompute(ConstraintCompute, testIndex_2, DispatchNumX, DispatchNumY, DispatchNumZ);
-
-        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_PrePosBufferName, m_PrePointBuffer);
-        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_NowPosBufferName, m_NowPointBuffer);
-        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_PostPosBufferName, m_PostPointBuffer);
-        ConstraintCmd.DispatchCompute(ConstraintCompute, testIndex_4, DispatchNumX, DispatchNumY, DispatchNumZ);
 
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_3, m_PrePosBufferName, m_PrePointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_3, m_NowPosBufferName, m_NowPointBuffer);
         ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_3, m_PostPosBufferName, m_PostPointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_3, m_NeighborDateBufferName, m_NeighborDataBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_3, m_NeighborIndexBufferName, m_NeighborIndexBuffer);
         ConstraintCmd.DispatchCompute(ConstraintCompute, testIndex_3, DispatchNumX, DispatchNumY, DispatchNumZ);
+
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_PrePosBufferName, m_PrePointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_NowPosBufferName, m_NowPointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_PostPosBufferName, m_PostPointBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_NeighborDateBufferName, m_NeighborDataBuffer);
+        ConstraintCmd.SetComputeBufferParam(ConstraintCompute, testIndex_4, m_NeighborIndexBufferName, m_NeighborIndexBuffer);
+        ConstraintCmd.DispatchCompute(ConstraintCompute, testIndex_4, DispatchNumX, DispatchNumY, DispatchNumZ);
+
+  
 
       
 
@@ -222,7 +244,12 @@ public class XPBD : MonoBehaviour
     public ComputeBuffer m_PostPointBuffer;
     public ComputeBuffer m_NowPointBuffer;
 
-    private List<Particle> m_PointList;
+    public ComputeBuffer m_NeighborDataBuffer; //邻接表的CB
+    public ComputeBuffer m_NeighborIndexBuffer;
+
+    private List<Particle> m_PointList; //所有点的数据
+    private NeighborSet<int, int> m_NeighborSet; //邻接表的数组 用于存放所有顶点
+    private List<int2> m_EdgeList;
     Particle[] particles;
 
 
@@ -241,6 +268,9 @@ public class XPBD : MonoBehaviour
         m_NowPointBuffer = new ComputeBuffer(MAXVERTEX,Marshal.SizeOf<Particle>());
         m_PrePointBuffer = new ComputeBuffer(MAXVERTEX, Marshal.SizeOf<Particle>());
         m_PostPointBuffer = new ComputeBuffer(MAXVERTEX, Marshal.SizeOf<Particle>());
+
+        m_NeighborDataBuffer = new ComputeBuffer(MAXVERTEX, Marshal.SizeOf<int>());
+        m_NeighborIndexBuffer = new ComputeBuffer(MAXVERTEX, Marshal.SizeOf<int>());
     }
 
 
@@ -252,6 +282,8 @@ public class XPBD : MonoBehaviour
         cmd = new CommandBuffer();
         m_Constraint_Distance = new Constraint_Distance(cmd, "Constraint", m_ComputeShader);
         m_PointList = new List<Particle>();
+        m_NeighborSet = new NeighborSet<int, int>();
+        m_EdgeList = new List<int2>();
         cmd.name = "Constraint";
 
         
@@ -259,12 +291,8 @@ public class XPBD : MonoBehaviour
         for (int i = 0;i<testMesh.vertices.Length;i++)
         {
             //
-            if (i == 0 || i == (int)Mathf.Sqrt(testMesh.vertexCount) - 1)
+            if (i == 0 || i == (int)Mathf.Sqrt(testMesh.vertexCount) - 1 || i == testMesh.vertexCount - 1 || i == testMesh.vertexCount - (int)Mathf.Sqrt(testMesh.vertexCount))
             {
-                if(i == (int)Mathf.Sqrt(testMesh.vertexCount) - 1)
-                {
-                    testMesh.vertices[i] = new Vector3(0, 0, 5f);
-                }
                     m_PointList.Add(new Particle(testMesh.vertices[i], 0f));
             }
             else
@@ -284,18 +312,27 @@ public class XPBD : MonoBehaviour
         m_PrePointBuffer.SetData(m_PointList.ToArray());
         m_NowPointBuffer.SetData(m_PointList.ToArray());
         m_PostPointBuffer.SetData(m_PointList.ToArray());
+     
+        InitialInteraciton();
+        InitialCalculate();
+       
+        SetPointFormTriangle(testMesh);
+
+        m_NeighborSet.SplitSet(out List<int> valuesIndex, out List<int> values);
+
+        m_NeighborDataBuffer.SetData(values.ToArray());
+        m_NeighborIndexBuffer.SetData(valuesIndex.ToArray());
+
+       
 
         m_Constraint_Distance.InitialVertexCount(testMesh.vertices.Length);
         //初始化初始位置.
-        m_Constraint_Distance.InitialBuffer(m_NowPointBuffer, m_PrePointBuffer, m_PostPointBuffer);
-
-        InitialInteraciton();
-        InitialCalculate();
+        m_Constraint_Distance.InitialBuffer(m_NowPointBuffer, m_PrePointBuffer, m_PostPointBuffer, m_NeighborDataBuffer, m_NeighborIndexBuffer);
 
         m_Material.SetBuffer("nowPoint",m_NowPointBuffer);
     }
 
-    private void Update()
+    private void FixedUpdate()
     {
         num++;
         {
@@ -310,6 +347,7 @@ public class XPBD : MonoBehaviour
                 temp[i] = particles[i].Position;
             }
                 testMesh.vertices = temp;
+            testMesh.colors[5] = Color.white;
 
             testMesh.RecalculateBounds();
 
@@ -328,7 +366,7 @@ public class XPBD : MonoBehaviour
                 InteractionExecute();
             //这中间是约束项执行
             {
-                m_Constraint_Distance.Execute(Time.deltaTime, DispatchNumX, DispatchNumY, DispatchNumZ, stiffness,gamma);
+                m_Constraint_Distance.Execute(Time.fixedDeltaTime, DispatchNumX, DispatchNumY, DispatchNumZ, stiffness,gamma);
             }
             //最后速度结算执行
             CalculateExecute();
@@ -339,15 +377,17 @@ public class XPBD : MonoBehaviour
         cmd.Clear();
 
     }
+
     /// <summary>
     /// 初始化交互计算的CS
     /// </summary>
     private void InitialInteraciton()
     {
-        m_InteractionCS.SetFloat("deltaTime", Time.deltaTime / 5f);
+        m_InteractionCS.SetFloat("deltaTime", Time.fixedDeltaTime / 5f);
         m_InteractionCS.SetInt("meshVertexNums", VertexNum);
         m_InteractionCS.SetInt("rawCount", (int)Mathf.Sqrt(VertexNum));
     }
+
     /// <summary>
     /// 执行交互计算的CS
     /// </summary>
@@ -362,6 +402,7 @@ public class XPBD : MonoBehaviour
         cmd.SetComputeBufferParam(m_InteractionCS, InteractionKernelIndex, m_PostPosBufferName, m_PostPointBuffer);
         cmd.DispatchCompute(m_InteractionCS, InteractionKernelIndex, DispatchNumX, DispatchNumY, DispatchNumZ);
     }
+
     /// <summary>
     /// 执行结算项的初始化,
     /// </summary>
@@ -371,6 +412,7 @@ public class XPBD : MonoBehaviour
         m_CalculateCS.SetInt("meshVertexNums", VertexNum);
         m_CalculateCS.SetInt("rawCount", (int)Mathf.Sqrt(VertexNum));
     }
+
     /// <summary>
     /// 执行最后速度计算的CS
     /// </summary>
@@ -382,4 +424,64 @@ public class XPBD : MonoBehaviour
         cmd.SetComputeBufferParam(m_CalculateCS, CalculateKernelIndex, m_PostPosBufferName, m_PostPointBuffer);
         cmd.DispatchCompute(m_CalculateCS, CalculateKernelIndex, DispatchNumX, DispatchNumY, DispatchNumZ);
     }
+
+    /// <summary>
+    /// 优化方案可以参考使用VirtuaMesh来计算模拟 这样似乎会更加的？方便？ 具体就是以现在的mesh生成一个虚拟的Mesh吧
+    /// </summary>
+    /// <param name="mesh"></param>
+    private void SetPointFormTriangle(Mesh mesh)
+    {
+        for(int i = 0; i < mesh.triangles.Length;i += 3)
+        {
+            //这里的索引方式有问题似乎
+            int3 tri = new int3(mesh.triangles[i], mesh.triangles[i + 1], mesh.triangles[i + 2]);
+
+
+            int x = (int)tri.x;
+            int y = (int)tri.y;
+            int z = (int)tri.z;
+
+            m_NeighborSet.UniqueAdd(tri.x, y);
+            m_NeighborSet.UniqueAdd(tri.x, z);
+
+            m_NeighborSet.UniqueAdd(tri.y, x);
+            m_NeighborSet.UniqueAdd(tri.y, z);
+
+            m_NeighborSet.UniqueAdd(tri.z, x);
+            m_NeighborSet.UniqueAdd(tri.z, y);
+
+            m_EdgeList.Add(DataHub.PackInt2(tri.xy));
+            m_EdgeList.Add(DataHub.PackInt2(tri.yz));
+            m_EdgeList.Add(DataHub.PackInt2(tri.zx));
+        }
+    }
+
+    /// <summary>
+    /// 从边列表上得到邻接表,由于得到本身的边列表就需要遍历一遍所有三角形和顶点 ，所以需要写一个大型的初始化才行，这个我感觉以后再说吧，可能需要重新调整架构
+    /// </summary>
+    /// <param name="mesh"></param>
+    private void SetPointFormEdge(Mesh mesh)
+    {
+        for (int i = 0; i < mesh.triangles.Length; i++)
+        {
+            //
+            int3 tri = mesh.triangles[i];
+
+            ushort x = (ushort)tri.x;
+            ushort y = (ushort)tri.y;
+            ushort z = (ushort)tri.z;
+
+            m_NeighborSet.UniqueAdd(tri.x, y);
+            m_NeighborSet.UniqueAdd(tri.x, z);
+            m_NeighborSet.UniqueAdd(tri.y, x);
+            m_NeighborSet.UniqueAdd(tri.y, z);
+            m_NeighborSet.UniqueAdd(tri.z, x);
+            m_NeighborSet.UniqueAdd(tri.z, y);
+
+            m_EdgeList.Add(DataHub.PackInt2(tri.xy));
+            m_EdgeList.Add(DataHub.PackInt2(tri.yz));
+            m_EdgeList.Add(DataHub.PackInt2(tri.zx));
+        }
+    }
+
 }

@@ -35,6 +35,6 @@ void Calculate(uint3 id : SV_DispatchThreadID)
     float3 velocity = (nowPoint[index].Position - postPoint[index].Position) / deltaTime;
     //阻尼的影响
     //nowPoint[index].Velocity = (1 - gamma) * velocity;
-    nowPoint[index].Velocity = (1 - gamma) * velocity;
+    nowPoint[index].Velocity =velocity *  clamp(1 - gamma * deltaTime, 0.9f, 1.0f);
     
 }
